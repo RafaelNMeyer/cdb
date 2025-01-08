@@ -1,9 +1,10 @@
 #ifndef CDB_LIBCDB_HPP
 #define CDB_LIBCDB_HPP
 
+#include <unistd.h>
+
 namespace cdb {
-	void greeting();
+pid_t attach(int argc, char **argv);
 }
 
 #endif
-
