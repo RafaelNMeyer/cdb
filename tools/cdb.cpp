@@ -5,35 +5,98 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
-namespace {} // namespace
+namespace {
+// TODO: refactor using stringstream and getline functions
+std::vector<std::string> split(std::string_view line, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string str = "";
+  for (int i = 0; i < line.length(); i++) {
+    char c = line[i];
+    if (c == ' ') {
+      if (!str.empty()) {
+        tokens.push_back(str);
+        str.clear();
+      }
+    } else {
+      str += c;
+      if (i == line.length() - 1)
+        tokens.push_back(str);
+    }
+  }
+  return tokens;
+}
+bool is_prefix(std::string_view str, std::string_view of) {
+  if (str.size() > of.size())
+    return false;
+  return std::equal(str.begin(), str.end(), of.begin());
+}
+void resume(pid_t pid) {
+  if (ptrace(PTRACE_CONT, pid, nullptr, nullptr) < 0) {
+    perror("PTRACE_CONT");
+    std::cerr << "Couldn't continue\n";
+    std::exit(-1);
+  }
+}
+
+void wait_on_signal(pid_t pid) {
+  int wait_status;
+  int options = 0;
+  if (waitpid(pid, &wait_status, options) < 0) {
+    perror("waitpid");
+    std::exit(-1);
+  }
+
+  if (WIFEXITED(wait_status)) {
+    printf("exited, status=%d\n", WEXITSTATUS(wait_status));
+  } else if (WIFSIGNALED(wait_status)) {
+    printf("killed by signal %d\n", WTERMSIG(wait_status));
+  } else if (WIFSTOPPED(wait_status)) {
+    printf("stopped by signal %d\n", WSTOPSIG(wait_status));
+  } else if (WIFCONTINUED(wait_status)) {
+    printf("continued\n");
+  }
+}
+
+void handle_command(pid_t pid, std::string_view line) {
+  auto args = split(line, ' ');
+  auto command = args[0];
+  if (is_prefix(command, "continue")) {
+    resume(pid);
+    wait_on_signal(pid);
+  } else {
+    std::cerr << "Unknow command\n";
+  }
+}
+} // namespace
 
 auto main(int argc, char **argv) -> int {
   if (argc == 1) {
-    std::cerr << "No arguments given\n";
+    std::cerr << "Error: Invalid number of arguments.\n";
+    std::cerr << "Usage: " << argv[0] << " -p <pid_number>\n";
+    std::cerr << "   or: " << argv[0] << " <process_name>\n";
+    std::cerr << "  -p <pid_number>: specifies the process's PID.\n";
+    std::cerr << "  <process_name>: specifies the name of the process.\n";
     return -1;
   }
   pid_t pid = cdb::attach(argc, argv);
   std::cout << "Attached process pid: " << pid << std::endl;
 
-  int wait_status = 0;
-  int options = 0;
-  do {
-    pid = waitpid(pid, &wait_status, options);
-    if (pid == -1) {
-      perror("waitpid");
-      exit(EXIT_FAILURE);
+  char *line = nullptr;
+  while ((line = readline("cdb > ")) != nullptr) {
+    std::string line_str;
+    if (std::string_view(line) == "") {
+      if (history_length > 0)
+        line_str = history_list()[history_length - 1]->line;
+    } else {
+      line_str = line;
+      add_history(line);
+      free(line);
     }
+    if (!line_str.empty())
+      handle_command(pid, line_str);
+  }
 
-    if (WIFEXITED(wait_status)) {
-      printf("exited, status=%d\n", WEXITSTATUS(wait_status));
-    } else if (WIFSIGNALED(wait_status)) {
-      printf("killed by signal %d\n", WTERMSIG(wait_status));
-    } else if (WIFSTOPPED(wait_status)) {
-      printf("stopped by signal %d\n", WSTOPSIG(wait_status));
-    } else if (WIFCONTINUED(wait_status)) {
-      printf("continued\n");
-    }
-  } while (!WIFEXITED(wait_status) && !WIFSIGNALED(wait_status));
   return 0;
 }

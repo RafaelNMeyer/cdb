@@ -15,29 +15,32 @@ pid_t cdb::attach(int argc, char **argv) {
       return -1;
     }
     pid = std::stoi(argv[2]);
-    if (ptrace(PTRACE_ATTACH, pid) < 0) {
+    if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
       perror("Error to attach process to pid");
       return -1;
     }
   } else {
     if ((pid = fork()) < 0) {
       perror("Fork error");
+      std::cerr << "Fork error" << std::endl;
       return -1;
     }
     if (pid == 0) {
-      std::cout << "Child running\n";
       if (ptrace(PTRACE_TRACEME) < 0) {
         perror("PTRACE_TRACEME request error");
-        exit(EXIT_FAILURE);
+        std::exit(-1);
       }
       auto proc_path = argv[1];
-      execlp(proc_path, proc_path, NULL);
-      perror("execlp error");
-      exit(EXIT_FAILURE);
-    }
-    if (ptrace(PTRACE_ATTACH, pid) < 0) {
-      perror("PTRACE_ATTACH request error");
-      return -1;
+      if (execlp(proc_path, proc_path, NULL) < 0) {
+        perror("execlp error");
+        std::exit(-1);
+      }
+    } else {
+			// TODO: check why this shit is not working with PTRACE_TRACEME!
+      //if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
+      //  perror("PTRACE_ATTACH request error");
+      //  return -1;
+      //}
     }
   }
   return pid;
