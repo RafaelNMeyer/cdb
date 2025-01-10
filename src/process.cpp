@@ -55,6 +55,7 @@ void cdb::process::resume() {
   if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
     error::send_errno("ptrace cont request failed");
   }
+  state_ = process_state::running;
 }
 
 void cdb::process::wait_on_signal() {
