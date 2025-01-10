@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 #include <editline/readline.h>
 #include <iostream>
 #include <libcdb/process.hpp>
@@ -41,7 +42,22 @@ bool is_prefix(std::string_view str, std::string_view of) {
     return false;
   return std::equal(str.begin(), str.end(), of.begin());
 }
-void resume(pid_t pid) {}
+
+void print_stop_reason(const cdb::process &proc, cdb::stop_reason reason) {
+  std::cout << "Process " << proc.pid() << ' ';
+  switch (reason.reason) {
+  case cdb::process_state::exited:
+    std::cout << "exited with status " << static_cast<int>(reason.info);
+    break;
+  case cdb::process_state::terminated:
+    std::cout << "terminated with signal " << sigabbrev_np(reason.info);
+    break;
+  case cdb::process_state::stopped:
+    std::cout << "stopped with signal " << sigabbrev_np(reason.info);
+    break;
+  }
+  std::cout << std::endl;
+}
 
 void handle_command(std::unique_ptr<cdb::process> &proc,
                     std::string_view line) {
@@ -49,7 +65,8 @@ void handle_command(std::unique_ptr<cdb::process> &proc,
   auto command = args[0];
   if (is_prefix(command, "continue")) {
     proc->resume();
-    proc->wait_on_signal();
+    auto reason = proc->wait_on_signal();
+    print_stop_reason(*proc, reason);
   } else {
     std::cerr << "Unknow command\n";
   }
