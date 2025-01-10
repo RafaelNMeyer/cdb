@@ -1,8 +1,24 @@
-#include <iostream>
 #include <libcdb/error.hpp>
 #include <libcdb/process.hpp>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+
+cdb::process::~process() {
+  if (pid_ != 0) {
+    int status;
+    if (state_ == process_state::running) {
+      kill(pid_, SIGSTOP);
+      waitpid(pid_, &status, 0);
+    }
+    ptrace(PTRACE_DETACH, pid_);
+    kill(pid_, SIGCONT);
+
+    if (terminate_on_end_) {
+      kill(pid_, SIGKILL);
+      waitpid(pid_, &status, 0);
+    }
+  }
+}
 
 std::unique_ptr<cdb::process> cdb::process::launch(std::filesystem::path path) {
   pid_t pid = 0;
@@ -40,6 +56,7 @@ void cdb::process::resume() {
     error::send_errno("ptrace cont request failed");
   }
 }
+
 void cdb::process::wait_on_signal() {
   int wait_status;
   int options = 0;

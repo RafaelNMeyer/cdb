@@ -12,7 +12,7 @@ public:
   process() = delete;
   process(const process &) = delete;
   process &operator=(const process &) = delete;
-  ~process() {};
+  ~process();
   static std::unique_ptr<process> launch(std::filesystem::path path);
   static std::unique_ptr<process> attach(pid_t pid);
 
