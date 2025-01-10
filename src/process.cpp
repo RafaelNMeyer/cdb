@@ -58,20 +58,26 @@ void cdb::process::resume() {
   state_ = process_state::running;
 }
 
-void cdb::process::wait_on_signal() {
+cdb::stop_reason::stop_reason(int wait_status) {
+  if (WIFEXITED(wait_status)) {
+    reason = process_state::exited;
+    info = WEXITSTATUS(wait_status);
+  } else if (WIFSIGNALED(wait_status)) {
+    reason = process_state::terminated;
+    info = WTERMSIG(wait_status);
+  } else if (WIFSTOPPED(wait_status)) {
+    reason = process_state::stopped;
+    info = WSTOPSIG(wait_status);
+  }
+}
+
+cdb::stop_reason cdb::process::wait_on_signal() {
   int wait_status;
   int options = 0;
   if (waitpid(pid_, &wait_status, options) < 0) {
     error::send_errno("waitpid failed");
   }
-
-  if (WIFEXITED(wait_status)) {
-    printf("exited, status=%d\n", WEXITSTATUS(wait_status));
-  } else if (WIFSIGNALED(wait_status)) {
-    printf("killed by signal %d\n", WTERMSIG(wait_status));
-  } else if (WIFSTOPPED(wait_status)) {
-    printf("stopped by signal %d\n", WSTOPSIG(wait_status));
-  } else if (WIFCONTINUED(wait_status)) {
-    printf("continued\n");
-  }
+  stop_reason reason(wait_status);
+  state_ = reason.reason;
+  return reason;
 }
