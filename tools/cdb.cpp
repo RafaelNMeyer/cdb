@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <editline/readline.h>
 #include <iostream>
-#include <libcdb/libcdb.hpp>
+#include <libcdb/process.hpp>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -32,39 +32,14 @@ bool is_prefix(std::string_view str, std::string_view of) {
     return false;
   return std::equal(str.begin(), str.end(), of.begin());
 }
-void resume(pid_t pid) {
-  if (ptrace(PTRACE_CONT, pid, nullptr, nullptr) < 0) {
-    perror("PTRACE_CONT");
-    std::cerr << "Couldn't continue\n";
-    std::exit(-1);
-  }
-}
+void resume(pid_t pid) {}
 
-void wait_on_signal(pid_t pid) {
-  int wait_status;
-  int options = 0;
-  if (waitpid(pid, &wait_status, options) < 0) {
-    perror("waitpid");
-    std::exit(-1);
-  }
-
-  if (WIFEXITED(wait_status)) {
-    printf("exited, status=%d\n", WEXITSTATUS(wait_status));
-  } else if (WIFSIGNALED(wait_status)) {
-    printf("killed by signal %d\n", WTERMSIG(wait_status));
-  } else if (WIFSTOPPED(wait_status)) {
-    printf("stopped by signal %d\n", WSTOPSIG(wait_status));
-  } else if (WIFCONTINUED(wait_status)) {
-    printf("continued\n");
-  }
-}
-
-void handle_command(pid_t pid, std::string_view line) {
+void handle_command(std::unique_ptr<cdb::process> proc, std::string_view line) {
   auto args = split(line, ' ');
   auto command = args[0];
   if (is_prefix(command, "continue")) {
-    resume(pid);
-    wait_on_signal(pid);
+    proc->resume();
+    proc->wait_on_signal();
   } else {
     std::cerr << "Unknow command\n";
   }
@@ -80,8 +55,18 @@ auto main(int argc, char **argv) -> int {
     std::cerr << "  <process_name>: specifies the name of the process.\n";
     return -1;
   }
-  pid_t pid = cdb::attach(argc, argv);
-  std::cout << "Attached process pid: " << pid << std::endl;
+  std::unique_ptr<cdb::process> proc;
+  if (std::string_view(argv[1]).compare("-p") == 0) {
+    if (argc != 3) {
+      std::cerr << "Missing PID number!\n";
+      return -1;
+    }
+    proc = cdb::process::attach(std::stoi(argv[2]));
+  } else {
+    auto program_path = argv[1];
+    proc = cdb::process::launch(program_path);
+  }
+  std::cout << "Attached process pid: " << proc->pid() << std::endl;
 
   char *line = nullptr;
   while ((line = readline("cdb > ")) != nullptr) {
@@ -94,8 +79,19 @@ auto main(int argc, char **argv) -> int {
       add_history(line);
       free(line);
     }
-    if (!line_str.empty())
-      handle_command(pid, line_str);
+    if (!line_str.empty()) {
+      // handle_command(std::move(proc), line_str);
+
+      auto args = split(line_str, ' ');
+      auto command = args[0];
+      std::cout << command << std::endl;
+      if (is_prefix(command, "continue")) {
+        proc->resume();
+        proc->wait_on_signal();
+      } else {
+        std::cerr << "Unknow command\n";
+      }
+    }
   }
 
   return 0;

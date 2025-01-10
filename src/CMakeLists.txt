@@ -1,4 +1,4 @@
-add_library(libcdb libcdb.cpp)
+add_library(libcdb process.cpp)
 add_library(cdb::libcdb ALIAS libcdb)
 
 set_target_properties(
