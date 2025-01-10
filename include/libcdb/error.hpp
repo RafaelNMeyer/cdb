@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 namespace cdb {
-class error : std::runtime_error {
+class error : public std::runtime_error {
 public:
   [[noreturn]]
   static void send(const std::string &what) {
@@ -17,7 +17,7 @@ public:
   }
 
 private:
-  error(const std::string &error) : std::runtime_error(error) {}
+  error(const std::string &what) : std::runtime_error(what) {}
 };
 } // namespace cdb
 

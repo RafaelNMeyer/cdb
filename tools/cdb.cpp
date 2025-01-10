@@ -1,3 +1,4 @@
+#include "libcdb/error.hpp"
 #include <cstdio>
 #include <cstring>
 #include <editline/readline.h>
@@ -71,20 +72,7 @@ void handle_command(std::unique_ptr<cdb::process> &proc,
     std::cerr << "Unknow command\n";
   }
 }
-} // namespace
-
-auto main(int argc, const char **argv) -> int {
-  if (argc == 1) {
-    std::cerr << "Error: Invalid number of arguments.\n";
-    std::cerr << "Usage: " << argv[0] << " -p <pid_number>\n";
-    std::cerr << "   or: " << argv[0] << " <process_name>\n";
-    std::cerr << "  -p <pid_number>: specifies the process's PID.\n";
-    std::cerr << "  <process_name>: specifies the name of the process.\n";
-    return -1;
-  }
-  std::unique_ptr<cdb::process> proc = attach(argc, argv);
-  std::cout << "Attached process pid: " << proc->pid() << std::endl;
-
+void main_loop(std::unique_ptr<cdb::process> &proc) {
   char *line = nullptr;
   while ((line = readline("cdb > ")) != nullptr) {
     std::string line_str;
@@ -97,7 +85,25 @@ auto main(int argc, const char **argv) -> int {
       free(line);
     }
     if (!line_str.empty())
-      handle_command(proc, line_str);
+      try {
+        handle_command(proc, line_str);
+      } catch (const cdb::error &err) {
+        std::cout << err.what() << "\n";
+      }
+  }
+}
+} // namespace
+
+auto main(int argc, const char **argv) -> int {
+  if (argc == 1) {
+    std::cerr << "Error: Invalid number of arguments.\n";
+    return -1;
+  }
+  try {
+    auto process = attach(argc, argv);
+    main_loop(process);
+  } catch (const cdb::error &err) {
+    std::cout << err.what() << '\n';
   }
 
   return 0;
