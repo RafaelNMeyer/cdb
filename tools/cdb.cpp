@@ -8,6 +8,15 @@
 #include <vector>
 
 namespace {
+std::unique_ptr<cdb::process> attach(int argc, const char **argv) {
+  if (argc == 3 && argv[1] == std::string_view("-p")) {
+    pid_t pid = std::atoi(argv[2]);
+    return cdb::process::attach(pid);
+  } else {
+    const char *program_path = argv[1];
+    return cdb::process::launch(program_path);
+  }
+}
 // TODO: refactor using stringstream and getline functions
 std::vector<std::string> split(std::string_view line, char delimiter) {
   std::vector<std::string> tokens;
@@ -34,7 +43,8 @@ bool is_prefix(std::string_view str, std::string_view of) {
 }
 void resume(pid_t pid) {}
 
-void handle_command(std::unique_ptr<cdb::process> proc, std::string_view line) {
+void handle_command(std::unique_ptr<cdb::process> &proc,
+                    std::string_view line) {
   auto args = split(line, ' ');
   auto command = args[0];
   if (is_prefix(command, "continue")) {
@@ -46,7 +56,7 @@ void handle_command(std::unique_ptr<cdb::process> proc, std::string_view line) {
 }
 } // namespace
 
-auto main(int argc, char **argv) -> int {
+auto main(int argc, const char **argv) -> int {
   if (argc == 1) {
     std::cerr << "Error: Invalid number of arguments.\n";
     std::cerr << "Usage: " << argv[0] << " -p <pid_number>\n";
@@ -55,17 +65,7 @@ auto main(int argc, char **argv) -> int {
     std::cerr << "  <process_name>: specifies the name of the process.\n";
     return -1;
   }
-  std::unique_ptr<cdb::process> proc;
-  if (std::string_view(argv[1]).compare("-p") == 0) {
-    if (argc != 3) {
-      std::cerr << "Missing PID number!\n";
-      return -1;
-    }
-    proc = cdb::process::attach(std::stoi(argv[2]));
-  } else {
-    auto program_path = argv[1];
-    proc = cdb::process::launch(program_path);
-  }
+  std::unique_ptr<cdb::process> proc = attach(argc, argv);
   std::cout << "Attached process pid: " << proc->pid() << std::endl;
 
   char *line = nullptr;
@@ -79,19 +79,8 @@ auto main(int argc, char **argv) -> int {
       add_history(line);
       free(line);
     }
-    if (!line_str.empty()) {
-      // handle_command(std::move(proc), line_str);
-
-      auto args = split(line_str, ' ');
-      auto command = args[0];
-      std::cout << command << std::endl;
-      if (is_prefix(command, "continue")) {
-        proc->resume();
-        proc->wait_on_signal();
-      } else {
-        std::cerr << "Unknow command\n";
-      }
-    }
+    if (!line_str.empty())
+      handle_command(proc, line_str);
   }
 
   return 0;
